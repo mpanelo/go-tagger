@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/buildutil"
@@ -58,13 +59,18 @@ func (m *Main) Run() error {
 	if err != nil {
 		return err
 	}
+	// When only the usage is printed out, cfg will be nil. Instead of calling os.Exit(0)
+	// just return early and exit main.
+	if m.cfg == nil {
+		return nil
+	}
 
 	node, err := m.parse()
 	if err != nil {
 		return err
 	}
 
-	start, end, err := m.findSelection(node)
+	_, _, err = m.findSelection(node)
 	if err != nil {
 		return err
 	}
@@ -73,7 +79,115 @@ func (m *Main) Run() error {
 }
 
 func (m *Main) findSelection(node ast.Node) (int, int, error) {
-	return 0, 0, nil
+	if m.cfg.line != "" {
+		return m.lineSelection()
+	}
+
+	if m.cfg.offset != 0 {
+		return m.offsetSelection(node)
+	}
+
+	if m.cfg.structName != "" {
+		return m.structSelection(node)
+	}
+
+	return 0, 0, fmt.Errorf("-line, -offset, or -struct must be provided")
+}
+
+func (m *Main) lineSelection() (int, int, error) {
+	tokens := strings.Split(m.cfg.line, ",")
+
+	if len(tokens) > 2 {
+		return 0, 0, fmt.Errorf("%d unexpected comma separated items provided, expected 1 or 2", len(tokens))
+	}
+
+	var start, end int
+	var err error
+
+	start, err = strconv.Atoi(tokens[0])
+	if err != nil {
+		return 0, 0, err
+	}
+
+	end = start
+	if len(tokens) == 2 {
+		end, err = strconv.Atoi(tokens[1])
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	if start > end {
+		return 0, 0, fmt.Errorf("start: %d, end: %d is not a valid range", start, end)
+	}
+
+	return start, end, nil
+}
+
+func (m *Main) offsetSelection(node ast.Node) (int, int, error) {
+	structs := m.collectStructs(node)
+
+	for _, st := range structs {
+		start := m.fset.Position(st.node.Pos())
+		end := m.fset.Position(st.node.End())
+
+		if start.Offset < m.cfg.offset && m.cfg.offset < end.Offset {
+			return start.Line, end.Line, nil
+		}
+	}
+
+	return 0, 0, fmt.Errorf("offset %d is not within a struct", m.cfg.offset)
+}
+
+func (m *Main) structSelection(node ast.Node) (int, int, error) {
+	structs := m.collectStructs(node)
+
+	for _, st := range structs {
+		if st.name == m.cfg.structName {
+			startLine := m.fset.Position(st.node.Pos()).Line
+			endLine := m.fset.Position(st.node.End()).Line
+			return startLine, endLine, nil
+		}
+	}
+
+	return 0, 0, fmt.Errorf("struct %s was not found", m.cfg.structName)
+}
+
+type structType struct {
+	name string
+	node *ast.StructType
+}
+
+func (m *Main) collectStructs(node ast.Node) map[token.Pos]*structType {
+	structs := make(map[token.Pos]*structType)
+
+	collectStructs := func(n ast.Node) bool {
+		t, ok := n.(*ast.TypeSpec)
+		if !ok {
+			return true
+		}
+
+		if t.Type == nil {
+			return true
+		}
+
+		structName := t.Name.Name
+
+		x, ok := t.Type.(*ast.StructType)
+		if !ok {
+			return true
+		}
+
+		structs[x.Pos()] = &structType{
+			name: structName,
+			node: x,
+		}
+
+		return true
+	}
+
+	ast.Inspect(node, collectStructs)
+	return structs
 }
 
 func (m *Main) parse() (ast.Node, error) {
