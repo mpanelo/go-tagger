@@ -5,14 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
-	"golang.org/x/tools/go/buildutil"
+	"github.com/mpanelo/custom-go-tool/internal/parser"
+	"github.com/mpanelo/custom-go-tool/internal/structfind"
 )
 
 // config defines how tags should be modified
@@ -49,8 +48,9 @@ func main() {
 }
 
 type Main struct {
-	fset *token.FileSet
-	cfg  *config
+	fset         *token.FileSet
+	cfg          *config
+	StructFinder *structfind.StructFinder
 }
 
 func (m *Main) Run() error {
@@ -65,12 +65,13 @@ func (m *Main) Run() error {
 		return nil
 	}
 
-	node, err := m.parse()
+	var file *ast.File
+	m.fset, file, err = parser.Parse(m.cfg.file, m.cfg.modified)
 	if err != nil {
 		return err
 	}
 
-	_, _, err = m.findSelection(node)
+	_, _, err = m.findSelection(file)
 	if err != nil {
 		return err
 	}
@@ -78,134 +79,20 @@ func (m *Main) Run() error {
 	return nil
 }
 
-func (m *Main) findSelection(node ast.Node) (int, int, error) {
+func (m *Main) findSelection(file *ast.File) (int, int, error) {
 	if m.cfg.line != "" {
-		return m.lineSelection()
+		return m.StructFinder.LineSelection()
 	}
 
 	if m.cfg.offset != 0 {
-		return m.offsetSelection(node)
+		return m.StructFinder.OffsetSelection(file)
 	}
 
 	if m.cfg.structName != "" {
-		return m.structSelection(node)
+		return m.StructFinder.StructSelection(file)
 	}
 
 	return 0, 0, fmt.Errorf("-line, -offset, or -struct must be provided")
-}
-
-func (m *Main) lineSelection() (int, int, error) {
-	tokens := strings.Split(m.cfg.line, ",")
-
-	if len(tokens) > 2 {
-		return 0, 0, fmt.Errorf("%d unexpected comma separated items provided, expected 1 or 2", len(tokens))
-	}
-
-	var start, end int
-	var err error
-
-	start, err = strconv.Atoi(tokens[0])
-	if err != nil {
-		return 0, 0, err
-	}
-
-	end = start
-	if len(tokens) == 2 {
-		end, err = strconv.Atoi(tokens[1])
-		if err != nil {
-			return 0, 0, err
-		}
-	}
-
-	if start > end {
-		return 0, 0, fmt.Errorf("start: %d, end: %d is not a valid range", start, end)
-	}
-
-	return start, end, nil
-}
-
-func (m *Main) offsetSelection(node ast.Node) (int, int, error) {
-	structs := m.collectStructs(node)
-
-	for _, st := range structs {
-		start := m.fset.Position(st.node.Pos())
-		end := m.fset.Position(st.node.End())
-
-		if start.Offset < m.cfg.offset && m.cfg.offset < end.Offset {
-			return start.Line, end.Line, nil
-		}
-	}
-
-	return 0, 0, fmt.Errorf("offset %d is not within a struct", m.cfg.offset)
-}
-
-func (m *Main) structSelection(node ast.Node) (int, int, error) {
-	structs := m.collectStructs(node)
-
-	for _, st := range structs {
-		if st.name == m.cfg.structName {
-			startLine := m.fset.Position(st.node.Pos()).Line
-			endLine := m.fset.Position(st.node.End()).Line
-			return startLine, endLine, nil
-		}
-	}
-
-	return 0, 0, fmt.Errorf("struct %s was not found", m.cfg.structName)
-}
-
-type structType struct {
-	name string
-	node *ast.StructType
-}
-
-func (m *Main) collectStructs(node ast.Node) map[token.Pos]*structType {
-	structs := make(map[token.Pos]*structType)
-
-	collectStructs := func(n ast.Node) bool {
-		t, ok := n.(*ast.TypeSpec)
-		if !ok {
-			return true
-		}
-
-		if t.Type == nil {
-			return true
-		}
-
-		structName := t.Name.Name
-
-		x, ok := t.Type.(*ast.StructType)
-		if !ok {
-			return true
-		}
-
-		structs[x.Pos()] = &structType{
-			name: structName,
-			node: x,
-		}
-
-		return true
-	}
-
-	ast.Inspect(node, collectStructs)
-	return structs
-}
-
-func (m *Main) parse() (ast.Node, error) {
-	m.fset = token.NewFileSet()
-	var contents any
-	if m.cfg.modified != nil {
-		archive, err := buildutil.ParseOverlayArchive(m.cfg.modified)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse -modified archive: %w", err)
-		}
-		fc, ok := archive[m.cfg.file]
-		if !ok {
-			return nil, fmt.Errorf("file %q not found in the -modified archive", m.cfg.file)
-		}
-		contents = fc
-	}
-
-	return parser.ParseFile(m.fset, m.cfg.file, contents, parser.ParseComments)
 }
 
 func (m *Main) getConfig() (*config, error) {
