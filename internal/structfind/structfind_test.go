@@ -5,7 +5,7 @@ import (
 	"go/token"
 	"testing"
 
-	"github.com/mpanelo/custom-go-tool/internal/structfind"
+	"github.com/mpanelo/go-tagger/internal/structfind"
 )
 
 func TestLineSelection(t *testing.T) {

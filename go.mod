@@ -1,4 +1,4 @@
-module github.com/mpanelo/custom-go-tool
+module github.com/mpanelo/go-tagger
 
 go 1.25.1
 

@@ -10,8 +10,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mpanelo/custom-go-tool/internal/parser"
-	"github.com/mpanelo/custom-go-tool/internal/structfind"
+	"github.com/mpanelo/go-tagger/internal/parser"
+	"github.com/mpanelo/go-tagger/internal/structfind"
 )
 
 // config defines how tags should be modified
