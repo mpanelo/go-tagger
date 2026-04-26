@@ -21,21 +21,15 @@ type structType struct {
 	node *ast.StructType
 }
 
-var ErrInvalidLineSelection = errors.New("invalid line selection")
-
-func newErr(errorMessage string) error {
-	return fmt.Errorf("%w: %s", ErrInvalidLineSelection, errorMessage)
-}
-
 func (sf *StructFinder) LineSelection() (int, int, error) {
 	if sf.Line == "" {
-		return 0, 0, newErr("Line cannot be empty")
+		return 0, 0, errors.New("line cannot be empty")
 	}
 
 	tokens := strings.Split(sf.Line, ",")
 
 	if len(tokens) > 2 {
-		return 0, 0, newErr(fmt.Sprintf("%d items provided, expected at most 2", len(tokens)))
+		return 0, 0, fmt.Errorf("%d items provided, expected at most 2", len(tokens))
 	}
 
 	var start, end int
@@ -43,19 +37,19 @@ func (sf *StructFinder) LineSelection() (int, int, error) {
 
 	start, err = strconv.Atoi(tokens[0])
 	if err != nil {
-		return 0, 0, newErr(err.Error())
+		return 0, 0, err
 	}
 
 	end = start
 	if len(tokens) == 2 {
 		end, err = strconv.Atoi(tokens[1])
 		if err != nil {
-			return 0, 0, newErr(err.Error())
+			return 0, 0, err
 		}
 	}
 
 	if start > end {
-		return 0, 0, newErr(fmt.Sprintf("start: %d, end: %d is not a valid range", start, end))
+		return 0, 0, fmt.Errorf("start: %d, end: %d is not a valid range", start, end)
 	}
 
 	return start, end, nil
