@@ -1,32 +1,40 @@
 package structfind
 
 import (
-	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"strconv"
 	"strings"
-)
 
-type StructFinder struct {
-	FileSet    *token.FileSet
-	Line       string
-	Offset     int
-	StructName string
-}
+	"github.com/mpanelo/go-tagger/internal/config"
+)
 
 type structType struct {
 	name string
 	node *ast.StructType
 }
 
-func (sf *StructFinder) LineSelection() (int, int, error) {
-	if sf.Line == "" {
-		return 0, 0, errors.New("line cannot be empty")
+func Find(cfg *config.Config) (int, int, error) {
+	if cfg.Lines != "" {
+		return lineSelection(cfg)
 	}
 
-	tokens := strings.Split(sf.Line, ",")
+	if cfg.Offset != 0 {
+		return offsetSelection(cfg)
+	}
+
+	if cfg.StructName != "" {
+		return structSelection(cfg)
+	}
+
+	return 0, 0, fmt.Errorf("-line, -offset, or -struct must be provided")
+}
+
+func lineSelection(cfg *config.Config) (int, int, error) {
+	// TODO: Check there are structs within the lines or if line is within a struct definition
+
+	tokens := strings.Split(cfg.Lines, ",")
 
 	if len(tokens) > 2 {
 		return 0, 0, fmt.Errorf("%d items provided, expected at most 2", len(tokens))
@@ -55,36 +63,36 @@ func (sf *StructFinder) LineSelection() (int, int, error) {
 	return start, end, nil
 }
 
-func (sf *StructFinder) OffsetSelection(node ast.Node) (int, int, error) {
-	structs := sf.collectStructs(node)
+func offsetSelection(cfg *config.Config) (int, int, error) {
+	structs := collectStructs(cfg.File)
 
 	for _, st := range structs {
-		start := sf.FileSet.Position(st.node.Pos())
-		end := sf.FileSet.Position(st.node.End())
+		start := cfg.Fset.Position(st.node.Pos())
+		end := cfg.Fset.Position(st.node.End())
 
-		if start.Offset < sf.Offset && sf.Offset < end.Offset {
+		if start.Offset < cfg.Offset && cfg.Offset < end.Offset {
 			return start.Line, end.Line, nil
 		}
 	}
 
-	return 0, 0, fmt.Errorf("offset %d is not within a struct", sf.Offset)
+	return 0, 0, fmt.Errorf("offset %d is not within a struct", cfg.Offset)
 }
 
-func (sf *StructFinder) StructSelection(node ast.Node) (int, int, error) {
-	structs := sf.collectStructs(node)
+func structSelection(cfg *config.Config) (int, int, error) {
+	structs := collectStructs(cfg.File)
 
 	for _, st := range structs {
-		if st.name == sf.StructName {
-			startLine := sf.FileSet.Position(st.node.Pos()).Line
-			endLine := sf.FileSet.Position(st.node.End()).Line
+		if st.name == cfg.StructName {
+			startLine := cfg.Fset.Position(st.node.Pos()).Line
+			endLine := cfg.Fset.Position(st.node.End()).Line
 			return startLine, endLine, nil
 		}
 	}
 
-	return 0, 0, fmt.Errorf("struct %s was not found", sf.StructName)
+	return 0, 0, fmt.Errorf("struct %s was not found", cfg.StructName)
 }
 
-func (sf *StructFinder) collectStructs(node ast.Node) map[token.Pos]*structType {
+func collectStructs(file *ast.File) map[token.Pos]*structType {
 	structs := make(map[token.Pos]*structType)
 
 	collectStructs := func(n ast.Node) bool {
@@ -112,6 +120,6 @@ func (sf *StructFinder) collectStructs(node ast.Node) map[token.Pos]*structType 
 		return true
 	}
 
-	ast.Inspect(node, collectStructs)
+	ast.Inspect(file, collectStructs)
 	return structs
 }

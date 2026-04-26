@@ -1,36 +1,36 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
-	"go/ast"
 	"go/parser"
-	"go/token"
-	"io"
 
+	"github.com/mpanelo/go-tagger/internal/config"
 	"golang.org/x/tools/go/buildutil"
 )
 
 // Parse is a wrapper over the ParseFile function from the package go/parser. If the modified is not nil,
 // then we parse the archive and look for the provided filename. If it's found, then ParseFile will parse
 // the archive, otherwise it will read from the file named filename.
-func Parse(filename string, modified io.Reader) (*token.FileSet, *ast.File, error) {
+func Parse(cfg *config.Config) (err error) {
+	if cfg.Filename == "" {
+		return errors.New("-file cannot be empty")
+	}
+
 	var contents any
 
-	if modified != nil {
-		archive, err := buildutil.ParseOverlayArchive(modified)
+	if cfg.Modified != nil {
+		archive, err := buildutil.ParseOverlayArchive(cfg.Modified)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse -modified archive: %w", err)
+			return fmt.Errorf("failed to parse -modified archive: %w", err)
 		}
-		fc, ok := archive[filename]
+		fc, ok := archive[cfg.Filename]
 		if !ok {
-			return nil, nil, fmt.Errorf("file %q not found in the -modified archive", filename)
+			return fmt.Errorf("file %q not found in the -modified archive", cfg.Filename)
 		}
 		contents = fc
 	}
 
-	fset := token.NewFileSet()
-
-	file, err := parser.ParseFile(fset, filename, contents, parser.ParseComments)
-
-	return fset, file, err
+	cfg.File, err = parser.ParseFile(cfg.Fset, cfg.Filename, contents, parser.ParseComments)
+	return
 }
