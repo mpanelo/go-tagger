@@ -85,9 +85,9 @@ func TestFind(t *testing.T) {
 		},
 		{
 			name:          "Happy Case: received start and end values",
-			line:          "1,100",
+			line:          "1,5",
 			expectedStart: 1,
-			expectedEnd:   100,
+			expectedEnd:   5,
 		},
 	}
 
@@ -116,11 +116,11 @@ func TestFind(t *testing.T) {
 				}
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if tt.expectedStart != start {
-				t.Fatalf("expected start %d, got %d", tt.expectedStart, start)
+			if tt.expectedStart != pr.Fset.Position(start).Line {
+				t.Fatalf("expected start %d, got %d", tt.expectedStart, pr.Fset.Position(start).Line)
 			}
-			if tt.expectedEnd != end {
-				t.Fatalf("expected end %d, got %d", tt.expectedEnd, end)
+			if tt.expectedEnd != pr.Fset.Position(end).Line {
+				t.Fatalf("expected end %d, got %d", tt.expectedEnd, pr.Fset.Position(end).Line)
 			}
 		})
 	}

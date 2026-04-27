@@ -21,7 +21,7 @@ type ParseResult struct {
 // the archive, otherwise it will read from the file named filename.
 func Parse(cfg *config.Config) (pr *ParseResult, err error) {
 	if cfg.Filename == "" {
-		err = errors.New("-file cannot be empty")
+		err = errors.New("-filename cannot be empty")
 		return
 	}
 

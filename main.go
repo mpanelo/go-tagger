@@ -19,9 +19,7 @@ func main() {
 	}
 }
 
-type Main struct {
-	// mod *modifytags.Modification
-}
+type Main struct{}
 
 func (m *Main) Run() error {
 	cfg, err := config.Parse()

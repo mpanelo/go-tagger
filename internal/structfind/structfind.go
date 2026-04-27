@@ -16,23 +16,23 @@ type structType struct {
 	node *ast.StructType
 }
 
-func Find(cfg *config.Config, parseResult *parser.ParseResult) (int, int, error) {
+func Find(cfg *config.Config, pr *parser.ParseResult) (token.Pos, token.Pos, error) {
 	if cfg.Lines != "" {
-		return lineSelection(cfg)
+		return lineSelection(cfg, pr)
 	}
 
 	if cfg.Offset != 0 {
-		return offsetSelection(cfg, parseResult)
+		return offsetSelection(cfg, pr)
 	}
 
 	if cfg.StructName != "" {
-		return structSelection(cfg, parseResult)
+		return structSelection(cfg, pr)
 	}
 
 	return 0, 0, fmt.Errorf("-line, -offset, or -struct must be provided")
 }
 
-func lineSelection(cfg *config.Config) (int, int, error) {
+func lineSelection(cfg *config.Config, pr *parser.ParseResult) (token.Pos, token.Pos, error) {
 	// TODO: Check there are structs within the lines or if line is within a struct definition
 
 	tokens := strings.Split(cfg.Lines, ",")
@@ -61,10 +61,23 @@ func lineSelection(cfg *config.Config) (int, int, error) {
 		return 0, 0, fmt.Errorf("start: %d, end: %d is not a valid range", start, end)
 	}
 
-	return start, end, nil
+	f := pr.Fset.File(pr.File.FileStart)
+	startPos := f.LineStart(start)
+	lineCount := f.LineCount()
+	if start < 0 || start > lineCount || end > lineCount {
+		return 0, 0, fmt.Errorf("outside file line range [%d, %d], got [%d, %d]", f.Base(), lineCount, start, end)
+	}
+	var endPos token.Pos
+	if end == lineCount {
+		endPos = f.Pos(f.Size())
+	} else {
+		endPos = f.LineStart(end+1) - 1
+	}
+
+	return startPos, endPos, nil
 }
 
-func offsetSelection(cfg *config.Config, parserResult *parser.ParseResult) (int, int, error) {
+func offsetSelection(cfg *config.Config, parserResult *parser.ParseResult) (token.Pos, token.Pos, error) {
 	structs := collectStructs(parserResult.File)
 
 	for _, st := range structs {
@@ -72,21 +85,19 @@ func offsetSelection(cfg *config.Config, parserResult *parser.ParseResult) (int,
 		end := parserResult.Fset.Position(st.node.End())
 
 		if start.Offset < cfg.Offset && cfg.Offset < end.Offset {
-			return start.Line, end.Line, nil
+			return st.node.Pos(), st.node.End(), nil
 		}
 	}
 
 	return 0, 0, fmt.Errorf("offset %d is not within a struct", cfg.Offset)
 }
 
-func structSelection(cfg *config.Config, parserResult *parser.ParseResult) (int, int, error) {
+func structSelection(cfg *config.Config, parserResult *parser.ParseResult) (token.Pos, token.Pos, error) {
 	structs := collectStructs(parserResult.File)
 
 	for _, st := range structs {
 		if st.name == cfg.StructName {
-			startLine := parserResult.Fset.Position(st.node.Pos()).Line
-			endLine := parserResult.Fset.Position(st.node.End()).Line
-			return startLine, endLine, nil
+			return st.node.Pos(), st.node.End(), nil
 		}
 	}
 
