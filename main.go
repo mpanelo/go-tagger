@@ -1,11 +1,12 @@
 package main
 
 import (
+	"errors"
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/mpanelo/go-tagger/internal/config"
-	"github.com/mpanelo/go-tagger/internal/modifytags"
 	"github.com/mpanelo/go-tagger/internal/parser"
 	"github.com/mpanelo/go-tagger/internal/structfind"
 )
@@ -19,19 +20,24 @@ func main() {
 }
 
 type Main struct {
-	cfg *config.Config
-	mod *modifytags.Modification
+	// mod *modifytags.Modification
 }
 
 func (m *Main) Run() error {
-	var err error
-	m.cfg = config.Parse()
+	cfg, err := config.Parse()
+	if err != nil {
+		if errors.Is(err, config.ErrNoArgs) {
+			flag.Usage()
+			os.Exit(0)
+		}
+	}
 
-	if err := parser.Parse(m.cfg); err != nil {
+	pr, err := parser.Parse(cfg)
+	if err != nil {
 		return err
 	}
 
-	_, _, err = structfind.Find(m.cfg)
+	_, _, err = structfind.Find(cfg, pr)
 	if err != nil {
 		return err
 	}

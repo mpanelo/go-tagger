@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mpanelo/go-tagger/internal/config"
+	"github.com/mpanelo/go-tagger/internal/parser"
 )
 
 type structType struct {
@@ -15,17 +16,17 @@ type structType struct {
 	node *ast.StructType
 }
 
-func Find(cfg *config.Config) (int, int, error) {
+func Find(cfg *config.Config, parseResult *parser.ParseResult) (int, int, error) {
 	if cfg.Lines != "" {
 		return lineSelection(cfg)
 	}
 
 	if cfg.Offset != 0 {
-		return offsetSelection(cfg)
+		return offsetSelection(cfg, parseResult)
 	}
 
 	if cfg.StructName != "" {
-		return structSelection(cfg)
+		return structSelection(cfg, parseResult)
 	}
 
 	return 0, 0, fmt.Errorf("-line, -offset, or -struct must be provided")
@@ -63,12 +64,12 @@ func lineSelection(cfg *config.Config) (int, int, error) {
 	return start, end, nil
 }
 
-func offsetSelection(cfg *config.Config) (int, int, error) {
-	structs := collectStructs(cfg.File)
+func offsetSelection(cfg *config.Config, parserResult *parser.ParseResult) (int, int, error) {
+	structs := collectStructs(parserResult.File)
 
 	for _, st := range structs {
-		start := cfg.Fset.Position(st.node.Pos())
-		end := cfg.Fset.Position(st.node.End())
+		start := parserResult.Fset.Position(st.node.Pos())
+		end := parserResult.Fset.Position(st.node.End())
 
 		if start.Offset < cfg.Offset && cfg.Offset < end.Offset {
 			return start.Line, end.Line, nil
@@ -78,13 +79,13 @@ func offsetSelection(cfg *config.Config) (int, int, error) {
 	return 0, 0, fmt.Errorf("offset %d is not within a struct", cfg.Offset)
 }
 
-func structSelection(cfg *config.Config) (int, int, error) {
-	structs := collectStructs(cfg.File)
+func structSelection(cfg *config.Config, parserResult *parser.ParseResult) (int, int, error) {
+	structs := collectStructs(parserResult.File)
 
 	for _, st := range structs {
 		if st.name == cfg.StructName {
-			startLine := cfg.Fset.Position(st.node.Pos()).Line
-			endLine := cfg.Fset.Position(st.node.End()).Line
+			startLine := parserResult.Fset.Position(st.node.Pos()).Line
+			endLine := parserResult.Fset.Position(st.node.End()).Line
 			return startLine, endLine, nil
 		}
 	}
@@ -95,7 +96,7 @@ func structSelection(cfg *config.Config) (int, int, error) {
 func collectStructs(file *ast.File) map[token.Pos]*structType {
 	structs := make(map[token.Pos]*structType)
 
-	collectStructs := func(n ast.Node) bool {
+	getAllStructs := func(n ast.Node) bool {
 		t, ok := n.(*ast.TypeSpec)
 		if !ok {
 			return true
@@ -120,6 +121,6 @@ func collectStructs(file *ast.File) map[token.Pos]*structType {
 		return true
 	}
 
-	ast.Inspect(file, collectStructs)
+	ast.Inspect(file, getAllStructs)
 	return structs
 }

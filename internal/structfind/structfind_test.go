@@ -1,11 +1,12 @@
 package structfind_test
 
 import (
-	"go/parser"
+	goParser "go/parser"
 	"go/token"
 	"testing"
 
 	"github.com/mpanelo/go-tagger/internal/config"
+	"github.com/mpanelo/go-tagger/internal/parser"
 	"github.com/mpanelo/go-tagger/internal/structfind"
 )
 
@@ -95,18 +96,20 @@ func TestFind(t *testing.T) {
 			var err error
 
 			cfg := &config.Config{
-				Fset:       token.NewFileSet(),
 				Lines:      tt.line,
 				Offset:     tt.offset,
 				StructName: tt.structName,
 			}
+			pr := &parser.ParseResult{
+				Fset: token.NewFileSet(),
+			}
 
-			cfg.File, err = parser.ParseFile(cfg.Fset, "example.go", src, parser.ParseComments)
+			pr.File, err = goParser.ParseFile(pr.Fset, "example.go", src, goParser.ParseComments)
 			if err != nil {
 				t.Fatalf("unexpected parser error: %v", err)
 			}
 
-			start, end, err := structfind.Find(cfg)
+			start, end, err := structfind.Find(cfg, pr)
 			if err != nil {
 				if tt.expectedError {
 					return

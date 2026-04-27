@@ -1,13 +1,14 @@
 package config
 
 import (
+	"errors"
 	"flag"
 	"fmt"
-	"go/ast"
-	"go/token"
 	"io"
 	"os"
 )
+
+var ErrNoArgs = errors.New("no args found")
 
 // Config defines how tags should be modified.
 type Config struct {
@@ -26,13 +27,10 @@ type Config struct {
 	AddTags    string
 	Override   bool
 	Sort       bool
-
-	Fset *token.FileSet
-	File *ast.File
 }
 
 // Parse handles flag initialization and returns a populated Config pointer.
-func Parse() *Config {
+func Parse() (*Config, error) {
 	c := &Config{}
 
 	flag.StringVar(&c.Filename, "filename", "", "File to be parsed")
@@ -60,14 +58,12 @@ func Parse() *Config {
 	flag.Parse()
 
 	if flag.NFlag() == 0 {
-		flag.Usage()
-		os.Exit(0)
+		return nil, ErrNoArgs
 	}
 
 	if *isModified {
 		c.Modified = os.Stdin
 	}
 
-	c.Fset = token.NewFileSet()
-	return c
+	return c, nil
 }
